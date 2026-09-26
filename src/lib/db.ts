@@ -8,15 +8,29 @@ import { DEFAULT_SETTINGS } from "./types";
 
 export type Sql = postgres.Sql;
 
+const isPostgresAddress = (value: string | undefined) => Boolean(value && /^postgres(ql)?:\/\//.test(value));
+
 /**
- * Finds the database address. Vercel's Supabase integration adds POSTGRES_URL
- * (sometimes with a prefix, e.g. STORAGE_POSTGRES_URL); DATABASE_URL also works.
+ * Finds the database address. Vercel's Supabase integration adds POSTGRES_URL,
+ * sometimes with a prefix (e.g. STORAGE_POSTGRES_URL); DATABASE_URL also works.
+ * As a fallback, any setting holding a postgres:// address is used, preferring
+ * the pooled one (what serverless apps like this should use).
  */
 export function databaseUrl(): string | null {
-  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
-  if (process.env.POSTGRES_URL) return process.env.POSTGRES_URL;
-  const key = Object.keys(process.env).find((k) => k.endsWith("_POSTGRES_URL"));
-  return key ? process.env[key]! : null;
+  const env = process.env;
+  if (isPostgresAddress(env.DATABASE_URL)) return env.DATABASE_URL!;
+  if (isPostgresAddress(env.POSTGRES_URL)) return env.POSTGRES_URL!;
+  const candidates = Object.entries(env)
+    .filter(([, value]) => isPostgresAddress(value))
+    .sort(([a], [b]) => Number(a.includes("NON_POOLING")) - Number(b.includes("NON_POOLING")) || a.length - b.length);
+  return candidates[0]?.[1] ?? null;
+}
+
+/** Names (never values) of settings that look database-related, to help with setup problems. */
+export function databaseSettingNames(): string[] {
+  return Object.keys(process.env)
+    .filter((k) => /POSTGRES|SUPABASE|DATABASE/i.test(k))
+    .sort();
 }
 
 let client: Sql | null = null;

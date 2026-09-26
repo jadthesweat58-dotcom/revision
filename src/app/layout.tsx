@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Nav from "@/components/Nav";
-import { databaseUrl } from "@/lib/db";
+import { databaseSettingNames, databaseUrl } from "@/lib/db";
 import { passwordIsSet } from "@/lib/auth";
 import "./globals.css";
 
@@ -38,6 +38,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 ))}
               </ul>
               <p className="dim">Follow the steps in SETUP.md, then redeploy in Vercel.</p>
+              {!databaseUrl() && (
+                <p className="small muted">
+                  Database settings this deployment can see:{" "}
+                  {databaseSettingNames().join(", ") || "none — Supabase isn't connected to this project yet"}
+                </p>
+              )}
             </div>
           </main>
         ) : (
