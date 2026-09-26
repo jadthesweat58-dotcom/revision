@@ -8,7 +8,7 @@ import { DEFAULT_SETTINGS } from "./types";
 
 export type Sql = postgres.Sql;
 
-const isPostgresAddress = (value: string | undefined) => Boolean(value && /^postgres(ql)?:\/\//.test(value));
+export const isPostgresAddress = (value: string | undefined) => Boolean(value && /^postgres(ql)?:\/\//.test(value));
 
 /**
  * Finds the database address. Vercel's Supabase integration adds POSTGRES_URL,
@@ -42,7 +42,7 @@ export function databaseSettingNames(): string[] {
 let client: Sql | null = null;
 let ready: Promise<void> | null = null;
 
-function connect(url: string, maxConnections = 5): Sql {
+export function connect(url: string, maxConnections = 5): Sql {
   const parsed = new URL(url);
   const isLocal = ["localhost", "127.0.0.1"].includes(parsed.hostname);
   parsed.search = ""; // drop extras like ?sslmode=require&supa=... — set explicitly below
@@ -51,7 +51,7 @@ function connect(url: string, maxConnections = 5): Sql {
     prepare: false, // needed for Supabase's connection pooler
     max: maxConnections,
     idle_timeout: 20,
-    connect_timeout: 10, // fail quickly (with an error you can see) instead of hanging
+    connect_timeout: 5, // fail quickly (with an error you can see) instead of hanging
     onnotice: () => {}, // hide "table already exists" notices
     transform: postgres.camel, // snake_case columns <-> camelCase in code
     types: {
@@ -78,7 +78,7 @@ export async function db(): Promise<Sql> {
 }
 
 /** Rejects if `promise` takes longer than `ms`, so nothing can hang forever. */
-function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+export function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(
@@ -97,7 +97,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<
  */
 async function setUpWithRescue() {
   try {
-    await withTimeout(setUp(client!), 12_000, "Database setup");
+    await withTimeout(setUp(client!), 6_000, "Database setup");
   } catch (error) {
     const code = (error as { code?: string }).code;
     if (code !== "APP_TIMEOUT" && code !== "CONNECT_TIMEOUT") throw error;
@@ -113,7 +113,7 @@ async function rescueStuckConnections() {
   if (!name) return;
   const backup = connect(process.env[name]!, 1);
   try {
-    await withTimeout(clearStuckSessions(backup, "10 seconds"), 10_000, "Clearing stuck connections");
+    await withTimeout(clearStuckSessions(backup, "10 seconds"), 3_000, "Clearing stuck connections");
   } catch {
     // Best effort: if this fails too, the second try below reports the problem.
   } finally {
@@ -157,7 +157,7 @@ async function alreadySetUp(sql: Sql): Promise<boolean> {
  * after it. This ends this app's own sessions that are stuck, or have been waiting
  * on a lock, for longer than `age`. No saved data is touched.
  */
-async function clearStuckSessions(sql: Sql, age: string) {
+export async function clearStuckSessions(sql: Sql, age: string) {
   try {
     await sql`select pg_terminate_backend(pid) from pg_stat_activity
               where usename = current_user and pid <> pg_backend_pid()

@@ -2,7 +2,7 @@
 
 import { connection } from "next/server";
 import type postgres from "postgres";
-import { db } from "./db";
+import { db, withTimeout } from "./db";
 import { addDays, todayISO, weekStart } from "./dates";
 import { buildDailyPlan } from "./plan";
 import {
@@ -46,7 +46,7 @@ export async function loadCore(): Promise<Core> {
   await connection(); // always load fresh data, never a cached copy
   const sql = await db();
   const today = todayISO();
-  const [subjects, allTopics, assessments, homework, sessions, settingRows] = await Promise.all([
+  const [subjects, allTopics, assessments, homework, sessions, settingRows] = await withTimeout(Promise.all([
     sql<Subject[]>`select id, slug, name, board, spec_code, kind, target_grade, stretch_grade, boundaries,
                           boundary_max, sort_order
                    from subjects order by sort_order, id`,
@@ -58,7 +58,7 @@ export async function loadCore(): Promise<Core> {
     sql<StudySession[]>`select id, subject_id, date, minutes, topic_ids, went_well, struggles, source
                         from sessions where date >= ${addDays(today, -400)} order by date desc, id desc`,
     sql<{ key: string; value: number }[]>`select key, value from settings`,
-  ]);
+  ]), 10_000, "Loading your data");
 
   const settings: Settings = { ...DEFAULT_SETTINGS };
   for (const row of settingRows) {
