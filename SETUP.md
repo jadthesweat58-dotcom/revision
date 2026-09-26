@@ -58,8 +58,12 @@ The app creates its own tables and fills in all your subjects and topics the fir
 
 ## If something goes wrong
 
+First, open **your-app-address/api/status** (for example `https://revision-xi-bay.vercel.app/api/status`).
+It works without logging in. `"ok":true` means the app and database are fine; otherwise the `"problem"` line says what's wrong.
+
 | What you see | What to do |
 | --- | --- |
+| Log in stuck on "Checking…" or pages stay grey | Wait 30 seconds and refresh: the app clears stuck database connections by itself. If it still happens, open Supabase (Vercel → **Storage** → your database → **Open in Supabase**), go to **Project Settings → General** and click **Restart project**. |
 | "Almost there" page | In Vercel: **Settings → Environment Variables**. Check `APP_PASSWORD` and `POSTGRES_URL` both exist, then **Redeploy**. |
 | "Application error" or the app can't reach the database | Free Supabase projects pause after a week without use. The app's daily background job should stop that happening. If it does pause, log in at **supabase.com**, open the project and click **Restore**. |
 | Forgot your password | Change `APP_PASSWORD` in Vercel, then **Redeploy**. This also logs out every device. |

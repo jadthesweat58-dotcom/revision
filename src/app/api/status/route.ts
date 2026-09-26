@@ -7,9 +7,13 @@ import { passwordIsSet } from "@/lib/auth";
 import { databaseSettingName, databaseSettingNames, db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 function explain(error: unknown): string {
   const { code, message = "" } = error as { code?: string; message?: string };
+  if (code === "APP_TIMEOUT") {
+    return `The database didn't answer in time (${message}). It may be jammed by stuck connections: see SETUP.md, "If something goes wrong".`;
+  }
   if (code === "CONNECT_TIMEOUT" || /timeout/i.test(message)) {
     return "Timed out reaching the database. If the Supabase project is paused, open supabase.com and click Restore.";
   }

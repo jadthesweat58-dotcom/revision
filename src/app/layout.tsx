@@ -11,6 +11,9 @@ export const metadata: Metadata = {
   icons: { icon: "/icon-192.png", apple: "/apple-touch-icon.png" },
 };
 
+// Give slow first loads (database waking up) time to finish.
+export const maxDuration = 60;
+
 export const viewport: Viewport = {
   themeColor: "#111110",
   width: "device-width",
