@@ -17,13 +17,19 @@ const isPostgresAddress = (value: string | undefined) => Boolean(value && /^post
  * the pooled one (what serverless apps like this should use).
  */
 export function databaseUrl(): string | null {
+  const name = databaseSettingName();
+  return name ? process.env[name]! : null;
+}
+
+/** Which setting the database address was taken from (the name only, never the value). */
+export function databaseSettingName(): string | null {
   const env = process.env;
-  if (isPostgresAddress(env.DATABASE_URL)) return env.DATABASE_URL!;
-  if (isPostgresAddress(env.POSTGRES_URL)) return env.POSTGRES_URL!;
-  const candidates = Object.entries(env)
-    .filter(([, value]) => isPostgresAddress(value))
-    .sort(([a], [b]) => Number(a.includes("NON_POOLING")) - Number(b.includes("NON_POOLING")) || a.length - b.length);
-  return candidates[0]?.[1] ?? null;
+  if (isPostgresAddress(env.DATABASE_URL)) return "DATABASE_URL";
+  if (isPostgresAddress(env.POSTGRES_URL)) return "POSTGRES_URL";
+  const candidates = Object.keys(env)
+    .filter((key) => isPostgresAddress(env[key]))
+    .sort((a, b) => Number(a.includes("NON_POOLING")) - Number(b.includes("NON_POOLING")) || a.length - b.length);
+  return candidates[0] ?? null;
 }
 
 /** Names (never values) of settings that look database-related, to help with setup problems. */
@@ -45,6 +51,8 @@ function connect(url: string): Sql {
     prepare: false, // needed for Supabase's connection pooler
     max: 5,
     idle_timeout: 20,
+    connect_timeout: 10, // fail quickly (with an error you can see) instead of hanging
+    onnotice: () => {}, // hide "table already exists" notices
     transform: postgres.camel, // snake_case columns <-> camelCase in code
     types: {
       // Keep dates as plain "YYYY-MM-DD" strings instead of JavaScript Dates.
@@ -78,7 +86,10 @@ async function setUp(sql: Sql) {
   });
 }
 
-/** Adds any starting subject that isn't in the database yet (never overwrites your edits). */
+/**
+ * Adds any starting subject that isn't in the database yet (never overwrites your edits).
+ * Rows are inserted in batches so the first setup takes a couple of seconds, not a minute.
+ */
 async function seed(sql: postgres.TransactionSql) {
   const existing = await sql<{ slug: string }[]>`select slug from subjects`;
   const have = new Set(existing.map((row) => row.slug));
@@ -93,20 +104,21 @@ async function seed(sql: postgres.TransactionSql) {
               ${subject.boundaryMax}, ${index})
       returning id`;
 
-    for (const [order, topic] of subject.topics.entries()) {
-      await sql`
-        insert into topics (subject_id, name, group_name, paper, weight, is_set_text, sort_order)
-        values (${id}, ${topic.name}, ${topic.group}, ${topic.paper}, ${topic.weight},
-                ${topic.setText ?? false}, ${order})`;
-    }
-    for (const a of subject.assessments) {
-      await sql`
-        insert into assessments (subject_id, kind, title, date, tbc)
-        values (${id}, ${a.kind}, ${a.title}, ${a.date}, ${a.tbc})`;
-    }
+    const topics = subject.topics.map((topic, order) => ({
+      subjectId: id,
+      name: topic.name,
+      groupName: topic.group,
+      paper: topic.paper,
+      weight: topic.weight,
+      isSetText: topic.setText ?? false,
+      sortOrder: order,
+    }));
+    await sql`insert into topics ${sql(topics)}`;
+
+    const assessments = subject.assessments.map((a) => ({ subjectId: id, kind: a.kind, title: a.title, date: a.date, tbc: a.tbc }));
+    if (assessments.length) await sql`insert into assessments ${sql(assessments)}`;
   }
 
-  for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
-    await sql`insert into settings (key, value) values (${key}, ${sql.json(value)}) on conflict (key) do nothing`;
-  }
+  const settings = Object.entries(DEFAULT_SETTINGS).map(([key, value]) => ({ key, value: sql.json(value) }));
+  await sql`insert into settings ${sql(settings)} on conflict (key) do nothing`;
 }
