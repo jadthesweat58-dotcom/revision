@@ -77,13 +77,50 @@ export async function db(): Promise<Sql> {
   return client;
 }
 
+/** Bump this whenever SCHEMA_SQL or the starting subjects change, so the setup runs again. */
+const SETUP_VERSION = 1;
+
 async function setUp(sql: Sql) {
+  if (await alreadySetUp(sql)) return; // the normal case: nothing to do, no waiting
+  await clearStuckSetups(sql);
   await sql.begin(async (tx) => {
+    // Never wait forever: give up with an error rather than leaving a page hanging.
+    await tx`set local lock_timeout = '15s'`;
+    await tx`set local statement_timeout = '30s'`;
+    await tx`set local idle_in_transaction_session_timeout = '30s'`;
     // Only one copy of the app sets up the database at a time.
     await tx`select pg_advisory_xact_lock(4242)`;
     await tx.unsafe(SCHEMA_SQL);
     await seed(tx);
+    await tx`insert into settings (key, value) values ('setupVersion', ${tx.json(SETUP_VERSION)})
+             on conflict (key) do update set value = excluded.value`;
   });
+}
+
+async function alreadySetUp(sql: Sql): Promise<boolean> {
+  try {
+    const [row] = await sql<{ value: number }[]>`select value from settings where key = 'setupVersion'`;
+    return row?.value === SETUP_VERSION;
+  } catch (error) {
+    if ((error as { code?: string }).code === "42P01") return false; // tables don't exist yet
+    throw error;
+  }
+}
+
+/**
+ * If an earlier setup was cut off half-way (e.g. Vercel stopped the page for taking
+ * too long), its unfinished work can block every new attempt. This ends any of this
+ * app's own database sessions that have been stuck mid-change for over 30 seconds.
+ */
+async function clearStuckSetups(sql: Sql) {
+  try {
+    await sql`select pg_terminate_backend(pid) from pg_stat_activity
+              where usename = current_user and pid <> pg_backend_pid()
+                and state like 'idle in transaction%'
+                and state_change < now() - interval '30 seconds'`;
+  } catch {
+    // Not allowed on this database. The timeouts above still stop it hanging.
+  }
 }
 
 /**
