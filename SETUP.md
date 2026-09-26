@@ -67,7 +67,7 @@ It works without logging in. `"ok":true` means the app and database are fine; ot
 | "Almost there" page | In Vercel: **Settings → Environment Variables**. Check `APP_PASSWORD` and `POSTGRES_URL` both exist, then **Redeploy**. |
 | "Application error" or the app can't reach the database | Free Supabase projects pause after a week without use. The app's daily background job should stop that happening. If it does pause, log in at **supabase.com**, open the project and click **Restore**. |
 | Forgot your password | Change `APP_PASSWORD` in Vercel, then **Redeploy**. This also logs out every device. |
-| The Storage tab doesn't offer Supabase | Create a free project at **supabase.com** (region London). Click **Connect**, then copy the **Transaction pooler** connection string (the one with port 6543) and put your database password into it. Add it in Vercel as an environment variable called `DATABASE_URL`, then **Redeploy**. |
+| The Storage tab doesn't offer Supabase | Create a free project at **supabase.com** (region London). Click **Connect**, then copy the **Session pooler** connection string and put your database password into it. Add it in Vercel as an environment variable called `DATABASE_URL`, then **Redeploy**. |
 
 ## Keeping it private
 

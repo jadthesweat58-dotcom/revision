@@ -6,7 +6,7 @@
 
 import { NextResponse } from "next/server";
 import { passwordIsSet } from "@/lib/auth";
-import { clearStuckSessions, connect, databaseSettingName, databaseSettingNames, isPostgresAddress, withTimeout } from "@/lib/db";
+import { backupSettingName, clearStuckSessions, connect, databaseSettingName, databaseSettingNames, withTimeout } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -18,7 +18,9 @@ function explain(error: unknown): string {
   if (code === "28P01" || /password authentication failed/i.test(message)) return "The database rejected the password in its address.";
   if (code === "ENOTFOUND" || /ENOTFOUND|getaddrinfo/i.test(message)) return "The database address couldn't be found.";
   if (/tenant or user not found/i.test(message)) return "Supabase doesn't recognise the user in the database address.";
-  return `Database error${code ? ` ${code}` : ""}: ${message.slice(0, 200)}`;
+  if (code === "ECONNREFUSED" || /ECONNREFUSED/.test(message)) return "The database refused the connection (it may be paused or restarting).";
+  const withoutAddresses = message.replace(/[\w.-]+:\d{2,5}/g, "[address]").slice(0, 200);
+  return `Database error${code ? ` ${code}` : ""}: ${withoutAddresses}`;
 }
 
 /** Tries one database address step by step, noting how far it gets. */
@@ -42,9 +44,11 @@ async function probe(settingName: string) {
       "Listing connections",
     );
     report.otherConnections = sessions.map((s) => `${s.count}× ${s.state}${s.waiting ? ` (waiting: ${s.waiting})` : ""}, oldest ${s.oldestSeconds}s`);
-    const stuck = sessions.some((s) => s.oldestSeconds > 30 && (s.state.startsWith("idle in transaction") || s.waiting === "Lock"));
+    const stuck = sessions.some(
+      (s) => s.oldestSeconds > 30 && (s.state.startsWith("idle in transaction") || s.waiting === "Lock" || (s.state === "active" && s.waiting === "Client")),
+    );
     if (stuck) {
-      await withTimeout(clearStuckSessions(sql, "30 seconds"), 2_000, "Ending stuck connections");
+      await withTimeout(clearStuckSessions(sql, 30), 2_000, "Ending stuck connections");
       report.endedStuckConnections = true;
     }
 
@@ -54,6 +58,11 @@ async function probe(settingName: string) {
       "Checking tables",
     );
     report.tablesCreated = hasTables;
+
+    // Queries that include a value (most of the app's) are the ones that got stuck
+    // through Supabase's connection sharer, so test one explicitly.
+    const [{ answer }] = await withTimeout(sql<{ answer: number }[]>`select ${41}::int + 1 as answer`, 3_000, "A query with a value");
+    report.queriesWithValues = answer === 42 ? "ok" : "wrong answer";
     if (hasTables) {
       const [row] = await withTimeout(
         sql<{ topics: number }[]>`select count(*)::int as topics from topics`,
@@ -76,7 +85,7 @@ export async function GET() {
   const base = { passwordSet: passwordIsSet(), settingsSeen: databaseSettingNames() };
   if (!main) return NextResponse.json({ ok: false, ...base, problem: "No database connected" });
 
-  const backup = Object.keys(process.env).find((k) => k !== main && k.includes("NON_POOLING") && isPostgresAddress(process.env[k]));
+  const backup = backupSettingName();
   const [mainReport, backupReport] = await Promise.all([probe(main), backup ? probe(backup) : Promise.resolve(null)]);
   const ok = Boolean(mainReport.connected && mainReport.tablesCreated && !mainReport.problem);
   const summary = ok
