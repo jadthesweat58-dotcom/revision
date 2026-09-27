@@ -1,11 +1,13 @@
 import { addHomework, deleteAssessment, deleteHomework, setHomeworkDone, updateAssessment } from "../actions";
+import TeamsCard from "./TeamsCard";
 import TestForm from "./TestForm";
 import SubmitButton from "@/components/SubmitButton";
 import { loadCore, subjectName } from "@/lib/data";
 import { daysBetween, formatDate, relativeDays } from "@/lib/dates";
 import { KIND_LABEL } from "@/lib/format";
 
-export default async function ComingUpPage() {
+export default async function ComingUpPage({ searchParams }: PageProps<"/coming-up">) {
+  const { teams } = await searchParams;
   const core = await loadCore();
   const { today } = core;
   const back = "/coming-up";
@@ -21,10 +23,7 @@ export default async function ComingUpPage() {
   return (
     <>
       <h1>Homework &amp; tests</h1>
-      <p className="notice small">
-        Teams sync comes in the next phase. Once it&apos;s connected, homework from Teams will appear here automatically
-        every day. Until then, add things here and they&apos;ll go straight into your daily plan.
-      </p>
+      <TeamsCard subjects={core.subjects} timeZone={core.settings.timeZone} outcome={typeof teams === "string" ? teams : undefined} />
 
       <div className="grid">
         <section className="card">
@@ -42,6 +41,11 @@ export default async function ComingUpPage() {
                       {h.className && ` · ${h.className}`} · ~{h.minutes} min
                       {h.source === "teams" && " · from Teams"}
                     </div>
+                    {h.link && (
+                      <a className="small" href={h.link} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
+                        Open in Teams ↗
+                      </a>
+                    )}
                     {h.notes && <div className="small dim">{h.notes}</div>}
                   </div>
                   <span className={`badge ${days < 0 ? "bad" : days <= 2 ? "warn" : ""}`}>

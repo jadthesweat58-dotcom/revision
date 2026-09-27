@@ -134,7 +134,7 @@ async function rescueStuckConnections() {
 }
 
 /** Bump this whenever SCHEMA_SQL or the starting subjects change, so the setup runs again. */
-const SETUP_VERSION = 1;
+const SETUP_VERSION = 2;
 
 async function setUp(sql: Sql, stuckAfterSeconds = 30) {
   if (await alreadySetUp(sql)) return; // the normal case: nothing to do, no waiting

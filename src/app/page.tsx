@@ -36,7 +36,7 @@ export default async function TodayPage() {
       .map((a) => ({ key: `a${a.id}`, date: a.date, label: KIND_LABEL[a.kind], title: a.title, subjectId: a.subjectId })),
   ].sort((a, b) => a.date.localeCompare(b.date));
 
-  const teamsConnected = core.homework.some((h) => h.source === "teams");
+  const teamsConnected = core.teamsConnected;
 
   return (
     <>

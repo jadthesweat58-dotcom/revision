@@ -1,6 +1,7 @@
 import { logout, updateSettings, updateSubject } from "../actions";
 import SubmitButton from "@/components/SubmitButton";
 import { loadCore } from "@/lib/data";
+import { TIME_ZONES } from "@/lib/dates";
 
 export default async function SettingsPage() {
   const core = await loadCore();
@@ -9,6 +10,22 @@ export default async function SettingsPage() {
   return (
     <>
       <h1>Settings</h1>
+
+      <section className="card">
+        <h2>Where you live</h2>
+        <p className="small muted">So your daily plan and dates switch over at your midnight.</p>
+        <form action={updateSettings} className="row">
+          <input type="hidden" name="back" value="/settings" />
+          <select name="timeZone" defaultValue={s.timeZone} style={{ maxWidth: 320 }}>
+            {TIME_ZONES.map((z) => (
+              <option key={z.id} value={z.id}>
+                {z.label}
+              </option>
+            ))}
+          </select>
+          <SubmitButton>Save</SubmitButton>
+        </form>
+      </section>
 
       <section className="card">
         <h2>Weekly hours</h2>

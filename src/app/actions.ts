@@ -6,7 +6,9 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { todayISO } from "@/lib/dates";
+import { TIME_ZONES } from "@/lib/dates";
+import { userToday } from "@/lib/data";
+import { syncTeams } from "@/lib/teams";
 import { nextReviewDate } from "@/lib/revision";
 import { SESSION_COOKIE, SESSION_DAYS, checkPassword, createSessionToken, isValidSessionToken } from "@/lib/auth";
 import type { Sql } from "@/lib/db";
@@ -30,7 +32,7 @@ const optionalId = (fd: FormData, key: string) => {
 };
 const ids = (fd: FormData, key: string) => fd.getAll(key).map(Number).filter((n) => n > 0);
 const isStatus = (s: string): s is Status => ["red", "amber", "green", "unrated"].includes(s);
-const dateOrToday = (fd: FormData, key: string) => text(fd, key) || todayISO();
+const dateOrToday = async (sql: Sql, fd: FormData, key: string) => text(fd, key) || (await userToday(sql));
 
 /** Only allow going back to a page inside this app (never another website). */
 const isLocalPath = (path: string) => path.startsWith("/") && !path.startsWith("//") && !path.includes("\\");
@@ -43,11 +45,11 @@ function done(fd: FormData, fallback = "/"): never {
 }
 
 async function clearTodaysPlan(sql: Sql) {
-  await sql`delete from daily_plans where date = ${todayISO()}`;
+  await sql`delete from daily_plans where date = ${await userToday(sql)}`;
 }
 
 async function rateTopic(sql: Sql, topicId: number, status: Status, sessionId: number | null = null) {
-  const today = todayISO();
+  const today = await userToday(sql);
   const [topic] = await sql<{ status: Status }[]>`select status from topics where id = ${topicId}`;
   if (!topic) return;
   const next = nextReviewDate(status, topic.status, today);
@@ -129,7 +131,7 @@ export async function logSession(fd: FormData) {
   const subjectId = number(fd, "subjectId");
   const minutes = Math.round(number(fd, "minutes"));
   const topicIds = ids(fd, "topicIds");
-  const date = dateOrToday(fd, "date");
+  const date = await dateOrToday(sql, fd, "date");
   if (!subjectId || minutes <= 0) done(fd, "/log");
 
   const [{ id }] = await sql<{ id: number }[]>`
@@ -172,7 +174,7 @@ export async function logScore(fd: FormData) {
     await sql`
       insert into paper_scores (subject_id, topic_id, paper, score, max_score, date, kind, ao_scores, notes)
       values (${number(fd, "subjectId")}, ${optionalId(fd, "topicId")}, ${text(fd, "paper")},
-              ${number(fd, "score")}, ${max}, ${dateOrToday(fd, "date")}, ${text(fd, "kind") || "past paper"},
+              ${number(fd, "score")}, ${max}, ${await dateOrToday(sql, fd, "date")}, ${text(fd, "kind") || "past paper"},
               ${Object.keys(aoScores).length ? sql.json(aoScores) : null}, ${text(fd, "notes")})`;
   }
   done(fd);
@@ -210,7 +212,7 @@ export async function logMistake(fd: FormData) {
   if (errorType) {
     await sql`insert into mistakes (subject_id, topic_id, error_type, note, date)
               values (${number(fd, "subjectId")}, ${optionalId(fd, "topicId")}, ${errorType},
-                      ${text(fd, "note")}, ${dateOrToday(fd, "date")})`;
+                      ${text(fd, "note")}, ${await dateOrToday(sql, fd, "date")})`;
   }
   done(fd);
 }
@@ -334,11 +336,51 @@ export async function deleteTextNote(fd: FormData) {
   done(fd);
 }
 
+// ---------- Microsoft Teams ----------
+
+export async function syncTeamsNow(fd: FormData) {
+  await requireLogin();
+  try {
+    await syncTeams(await db());
+  } catch {
+    // The problem is saved and shown on the Homework & tests page.
+  }
+  done(fd, "/coming-up");
+}
+
+export async function disconnectTeams(fd: FormData) {
+  await requireLogin();
+  const sql = await db();
+  await sql`delete from integrations where provider = 'teams'`;
+  done(fd, "/coming-up");
+}
+
+/** Your choice of subject for each Teams class (also fixes homework already synced). */
+export async function saveClassSubjects(fd: FormData) {
+  await requireLogin();
+  const sql = await db();
+  for (const [key, value] of fd.entries()) {
+    const match = /^class_(.+)$/.exec(key);
+    if (!match) continue;
+    const subjectId = Number(value) > 0 ? Number(value) : null;
+    await sql`update teams_classes set subject_id = ${subjectId} where class_id = ${match[1]}`;
+    await sql`update homework set subject_id = ${subjectId}
+              where source = 'teams' and class_name = (select name from teams_classes where class_id = ${match[1]})`;
+  }
+  await clearTodaysPlan(sql);
+  done(fd, "/coming-up");
+}
+
 // ---------- Settings and plan ----------
 
 export async function updateSettings(fd: FormData) {
   await requireLogin();
   const sql = await db();
+  const timeZone = text(fd, "timeZone");
+  if (TIME_ZONES.some((z) => z.id === timeZone)) {
+    await sql`insert into settings (key, value) values ('timeZone', ${sql.json(timeZone)})
+              on conflict (key) do update set value = excluded.value`;
+  }
   for (const key of ["normalHoursMin", "normalHoursMax", "heavyHoursMin", "heavyHoursMax", "heavyWeeksBefore"]) {
     const value = number(fd, key);
     if (value > 0) {

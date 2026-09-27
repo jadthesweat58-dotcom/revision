@@ -2,8 +2,8 @@
 
 import { connection } from "next/server";
 import type postgres from "postgres";
-import { db, withTimeout } from "./db";
-import { addDays, todayISO, weekStart } from "./dates";
+import { db, withTimeout, type Sql } from "./db";
+import { addDays, isValidTimeZone, todayISO, weekStart } from "./dates";
 import { buildDailyPlan } from "./plan";
 import {
   buildContext,
@@ -37,6 +37,7 @@ export interface Core {
   homework: Homework[];
   sessions: StudySession[];
   settings: Settings;
+  teamsConnected: boolean;
 }
 
 const TOPIC_COLUMNS = `id, subject_id, name, group_name, paper, weight, status, last_reviewed, next_review,
@@ -45,25 +46,25 @@ const TOPIC_COLUMNS = `id, subject_id, name, group_name, paper, weight, status, 
 export async function loadCore(): Promise<Core> {
   await connection(); // always load fresh data, never a cached copy
   const sql = await db();
-  const today = todayISO();
-  const [subjects, allTopics, assessments, homework, sessions, settingRows] = await withTimeout(Promise.all([
+  const roughToday = todayISO(); // the exact "today" needs the time zone setting, loaded below
+  const [subjects, allTopics, assessments, homework, sessions, settingRows, teams] = await withTimeout(Promise.all([
     sql<Subject[]>`select id, slug, name, board, spec_code, kind, target_grade, stretch_grade, boundaries,
                           boundary_max, sort_order
                    from subjects order by sort_order, id`,
     sql.unsafe<Topic[]>(`select ${TOPIC_COLUMNS} from topics order by subject_id, sort_order, id`),
     sql<Assessment[]>`select id, subject_id, kind, title, date, tbc, topic_ids, notes
                       from assessments order by date, id`,
-    sql<Homework[]>`select id, subject_id, title, due_date, notes, done, source, class_name, minutes
-                    from homework where due_date >= ${addDays(today, -30)} order by due_date, id`,
+    sql<Homework[]>`select id, subject_id, title, due_date, notes, done, source, class_name, minutes, link
+                    from homework where due_date >= ${addDays(roughToday, -30)} order by due_date, id`,
     sql<StudySession[]>`select id, subject_id, date, minutes, topic_ids, went_well, struggles, source
-                        from sessions where date >= ${addDays(today, -400)} order by date desc, id desc`,
-    sql<{ key: string; value: number }[]>`select key, value from settings`,
+                        from sessions where date >= ${addDays(roughToday, -400)} order by date desc, id desc`,
+    sql<{ key: string; value: number | string }[]>`select key, value from settings`,
+    sql<{ connected: boolean }[]>`select exists(select 1 from integrations
+                                   where provider = 'teams' and data ? 'refreshToken') as connected`,
   ]), 10_000, "Loading your data");
 
-  const settings: Settings = { ...DEFAULT_SETTINGS };
-  for (const row of settingRows) {
-    if (row.key in settings) settings[row.key as keyof Settings] = Number(row.value);
-  }
+  const settings = settingsFrom(settingRows);
+  const today = todayISO(new Date(), settings.timeZone);
 
   return {
     today,
@@ -74,7 +75,26 @@ export async function loadCore(): Promise<Core> {
     homework: [...homework],
     sessions: [...sessions],
     settings,
+    teamsConnected: Boolean(teams[0]?.connected),
   };
+}
+
+export function settingsFrom(rows: readonly { key: string; value: number | string }[]): Settings {
+  const settings: Settings = { ...DEFAULT_SETTINGS };
+  for (const { key, value } of rows) {
+    if (key === "timeZone") {
+      if (isValidTimeZone(String(value))) settings.timeZone = String(value);
+    } else if (key in settings && Number.isFinite(Number(value))) {
+      (settings as unknown as Record<string, number>)[key] = Number(value);
+    }
+  }
+  return settings;
+}
+
+/** Today's date in your time zone (for places that don't load everything). */
+export async function userToday(sql: Sql): Promise<string> {
+  const rows = await sql<{ key: string; value: string }[]>`select key, value from settings where key = 'timeZone'`;
+  return todayISO(new Date(), settingsFrom(rows).timeZone);
 }
 
 export interface Overview {

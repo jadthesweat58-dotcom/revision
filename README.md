@@ -4,6 +4,7 @@ A personal revision dashboard: topics for every subject marked red / amber / gre
 a daily plan built from priorities, exam countdowns, working grades, mistakes and weekly hours.
 
 **Setting it up for the first time? Follow [SETUP.md](SETUP.md).**
+**Connecting Microsoft Teams? Follow [TEAMS_SETUP.md](TEAMS_SETUP.md).**
 
 ## Subjects
 
@@ -44,7 +45,9 @@ a daily plan built from priorities, exam countdowns, working grades, mistakes an
 | `src/lib/seed-data.ts` | Starting subjects, topics, grade boundaries and dates |
 | `src/lib/schema.ts` | Database tables (created automatically) |
 | `src/proxy.ts`, `src/lib/auth.ts` | Password protection |
-| `src/app/api/cron/daily/` | Daily background job (keeps the database awake, prepares today's plan) |
+| `src/lib/teams.ts`, `src/app/api/teams/` | Microsoft Teams connection and homework sync |
+| `src/app/api/cron/daily/` | Daily background job: syncs Teams, then prepares today's plan |
+| `src/app/api/status/` | Health check you can open without logging in |
 
 ## Running it on a computer (optional)
 
@@ -58,7 +61,7 @@ npm test                     # run the tests
 ## Roadmap
 
 1. **Dashboard** (done)
-2. **Teams sync:** read homework from Microsoft Teams every day and put it in the plan
-3. **Claude connector:** an MCP server so Claude study chats can read your plan and log sessions
+2. **Teams sync** (done): reads homework from Microsoft Teams every morning and puts it in the plan
+3. **Claude connector:** an MCP server so Claude study chats can read your plan, log sessions, and add homework or tests from screenshots
 4. **Weekly review report**
 5. **OneDrive lesson files** (only when asked)

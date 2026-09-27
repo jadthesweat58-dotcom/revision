@@ -59,6 +59,8 @@ export interface Homework {
   source: string;
   className: string;
   minutes: number;
+  /** Link to open it in Teams (homework synced from Teams). */
+  link: string;
 }
 
 export interface StudySession {
@@ -124,6 +126,8 @@ export interface Settings {
   heavyHoursMax: number;
   /** How many weeks before a mock or final exam count as "heavy" weeks. */
   heavyWeeksBefore: number;
+  /** Where you live, so "today" changes at your midnight, e.g. "Asia/Dubai". */
+  timeZone: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -132,6 +136,7 @@ export const DEFAULT_SETTINGS: Settings = {
   heavyHoursMin: 20,
   heavyHoursMax: 24,
   heavyWeeksBefore: 4,
+  timeZone: "Europe/London",
 };
 
 export interface PlanItem {

@@ -185,7 +185,7 @@ describe("daily plan", () => {
     const ctx = buildContext([maths, geography], topics, assessments, "2026-09-26");
     const priorities = new Map(topics.map((t) => [t.id, topicPriority(t, ctx)]));
     const homework = [
-      { id: 99, subjectId: 2, title: "Worksheet", dueDate: "2026-09-27", notes: "", done: false, source: "manual", className: "", minutes: 40 },
+      { id: 99, subjectId: 2, title: "Worksheet", dueDate: "2026-09-27", notes: "", done: false, source: "manual", className: "", minutes: 40, link: "" },
     ];
     const plan = buildDailyPlan({
       today: "2026-09-26",

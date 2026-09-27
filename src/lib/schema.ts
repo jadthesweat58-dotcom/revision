@@ -137,4 +137,19 @@ create table if not exists settings (
   key text primary key,
   value jsonb not null
 );
+
+-- Phase 2: Microsoft Teams
+alter table homework add column if not exists link text not null default '';
+
+create table if not exists integrations (
+  provider text primary key,
+  data jsonb not null default '{}',
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists teams_classes (
+  class_id text primary key,
+  name text not null,
+  subject_id int references subjects(id) on delete set null
+);
 `;

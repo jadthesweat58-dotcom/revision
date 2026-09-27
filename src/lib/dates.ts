@@ -1,12 +1,37 @@
-// Date helpers. Dates are stored as "YYYY-MM-DD" strings and "today" is
-// always worked out in UK time, whatever time zone the server runs in.
+// Date helpers. Dates are stored as "YYYY-MM-DD" strings and "today" is worked
+// out in your time zone (set in Settings), whatever time zone the server runs in.
 
-const TIME_ZONE = "Europe/London";
+export const DEFAULT_TIME_ZONE = "Europe/London";
 
-export function todayISO(now: Date = new Date()): string {
+/** Time zones offered in Settings. */
+export const TIME_ZONES = [
+  { id: "Asia/Dubai", label: "UAE (Dubai, Abu Dhabi)" },
+  { id: "Asia/Muscat", label: "Oman" },
+  { id: "Asia/Qatar", label: "Qatar" },
+  { id: "Asia/Bahrain", label: "Bahrain" },
+  { id: "Asia/Kuwait", label: "Kuwait" },
+  { id: "Asia/Riyadh", label: "Saudi Arabia" },
+  { id: "Asia/Baghdad", label: "Iraq" },
+  { id: "Asia/Amman", label: "Jordan" },
+  { id: "Asia/Beirut", label: "Lebanon" },
+  { id: "Africa/Cairo", label: "Egypt" },
+  { id: "Europe/Istanbul", label: "Turkey" },
+  { id: "Europe/London", label: "UK" },
+];
+
+export function isValidTimeZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function todayISO(now: Date = new Date(), timeZone: string = DEFAULT_TIME_ZONE): string {
   // The en-CA locale formats dates as YYYY-MM-DD.
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: TIME_ZONE,
+    timeZone: isValidTimeZone(timeZone) ? timeZone : DEFAULT_TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
