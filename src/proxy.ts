@@ -4,7 +4,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
 
 // Pages that must work without logging in.
-const PUBLIC_PATHS = ["/login", "/api/cron/", "/api/status"];
+// The connector routes check their own keys/tokens.
+const PUBLIC_PATHS = ["/login", "/api/cron/", "/api/status", "/api/mcp", "/api/agent", "/api/oauth/", "/.well-known/"];
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;

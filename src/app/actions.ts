@@ -9,7 +9,9 @@ import { db } from "@/lib/db";
 import { TIME_ZONES } from "@/lib/dates";
 import { userToday } from "@/lib/data";
 import { syncTeams } from "@/lib/teams";
-import { nextReviewDate } from "@/lib/revision";
+import { createApiKey } from "@/lib/agent/auth";
+import { revokeAllClaude } from "@/lib/agent/oauth";
+import { clearTodaysPlan, rateTopic } from "@/lib/mutations";
 import { SESSION_COOKIE, SESSION_DAYS, checkPassword, createSessionToken, isValidSessionToken } from "@/lib/auth";
 import type { Sql } from "@/lib/db";
 import type { Status } from "@/lib/types";
@@ -42,21 +44,6 @@ function done(fd: FormData, fallback = "/"): never {
   revalidatePath("/", "layout");
   const back = text(fd, "back");
   redirect(isLocalPath(back) ? back : fallback);
-}
-
-async function clearTodaysPlan(sql: Sql) {
-  await sql`delete from daily_plans where date = ${await userToday(sql)}`;
-}
-
-async function rateTopic(sql: Sql, topicId: number, status: Status, sessionId: number | null = null) {
-  const today = await userToday(sql);
-  const [topic] = await sql<{ status: Status }[]>`select status from topics where id = ${topicId}`;
-  if (!topic) return;
-  const next = nextReviewDate(status, topic.status, today);
-  await sql`update topics set status = ${status}, last_reviewed = ${today}, next_review = ${next}
-            where id = ${topicId}`;
-  await sql`insert into topic_reviews (topic_id, session_id, date, status)
-            values (${topicId}, ${sessionId}, ${today}, ${status})`;
 }
 
 // ---------- Login ----------
@@ -369,6 +356,34 @@ export async function saveClassSubjects(fd: FormData) {
   }
   await clearTodaysPlan(sql);
   done(fd, "/coming-up");
+}
+
+// ---------- Connector (Claude chats and Jarvis) ----------
+
+/** Makes a new key for Jarvis. The key is shown once, then only its hash is kept. */
+export async function createConnectorKey(
+  _prev: { key?: string; name?: string; error?: string } | null,
+  fd: FormData,
+): Promise<{ key?: string; name?: string; error?: string }> {
+  await requireLogin();
+  const name = text(fd, "name").slice(0, 40);
+  if (!name) return { error: "Give the key a name, e.g. Jarvis." };
+  const key = await createApiKey(await db(), name);
+  revalidatePath("/settings");
+  return { key, name };
+}
+
+export async function revokeConnectorKey(fd: FormData) {
+  await requireLogin();
+  const sql = await db();
+  await sql`update api_keys set revoked = true where id = ${number(fd, "id")}`;
+  done(fd, "/settings");
+}
+
+export async function disconnectClaude(fd: FormData) {
+  await requireLogin();
+  await revokeAllClaude(await db());
+  done(fd, "/settings");
 }
 
 // ---------- Settings and plan ----------

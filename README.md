@@ -5,6 +5,7 @@ a daily plan built from priorities, exam countdowns, working grades, mistakes an
 
 **Setting it up for the first time? Follow [SETUP.md](SETUP.md).**
 **Connecting Microsoft Teams? Follow [TEAMS_SETUP.md](TEAMS_SETUP.md).**
+**Connecting Claude chats or Jarvis? Follow [CONNECTOR.md](CONNECTOR.md).**
 
 ## Subjects
 
@@ -48,6 +49,9 @@ a daily plan built from priorities, exam countdowns, working grades, mistakes an
 | `src/lib/teams.ts`, `src/app/api/teams/` | Microsoft Teams connection and homework sync |
 | `src/app/api/cron/daily/` | Daily background job: syncs Teams, then prepares today's plan |
 | `src/app/api/status/` | Health check you can open without logging in |
+| `src/lib/agent/` | Connector: tools for Claude chats and Jarvis, MCP server, keys and OAuth |
+| `src/app/api/mcp/`, `src/app/api/agent/` | Connector addresses for Claude (MCP) and Jarvis (simple JSON) |
+| `src/app/oauth/authorize/`, `src/app/api/oauth/` | "Allow Claude?" screen and Claude's sign-in |
 
 ## Running it on a computer (optional)
 
@@ -62,6 +66,6 @@ npm test                     # run the tests
 
 1. **Dashboard** (done)
 2. **Teams sync** (done): reads homework from Microsoft Teams every morning and puts it in the plan
-3. **Claude connector:** an MCP server so Claude study chats can read your plan, log sessions, and add homework or tests from screenshots
+3. **Connector** (done): Claude study chats and Jarvis can read your plan, log sessions, and add homework or tests
 4. **Weekly review report**
 5. **OneDrive lesson files** (only when asked)

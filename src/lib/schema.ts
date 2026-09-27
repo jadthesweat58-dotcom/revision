@@ -152,4 +152,43 @@ create table if not exists teams_classes (
   name text not null,
   subject_id int references subjects(id) on delete set null
 );
+
+-- Phase 3: connector for Claude chats and Jarvis.
+-- Keys and tokens are stored only as SHA-256 hashes, never in plain text.
+create table if not exists api_keys (
+  id serial primary key,
+  name text not null,
+  key_hash text not null unique,
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz,
+  revoked boolean not null default false
+);
+
+create table if not exists oauth_clients (
+  client_id text primary key,
+  client_name text not null default '',
+  redirect_uris jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists oauth_codes (
+  code_hash text primary key,
+  client_id text not null,
+  redirect_uri text not null,
+  code_challenge text not null,
+  scope text not null default '',
+  expires_at timestamptz not null,
+  used boolean not null default false
+);
+
+create table if not exists oauth_tokens (
+  token_hash text primary key,
+  kind text not null,
+  client_id text not null,
+  scope text not null default '',
+  expires_at timestamptz not null,
+  revoked boolean not null default false,
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz
+);
 `;

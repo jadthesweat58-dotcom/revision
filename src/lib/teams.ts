@@ -9,6 +9,7 @@ import type postgres from "postgres";
 import type { Sql } from "./db";
 import { addDays, todayISO } from "./dates";
 import { settingsFrom } from "./data";
+import { appOrigin } from "./origin";
 
 // These two can be pointed at a fake Microsoft server for testing. Normally unset.
 const LOGIN_BASE = process.env.MS_LOGIN_BASE ?? "https://login.microsoftonline.com/organizations/oauth2/v2.0";
@@ -341,16 +342,9 @@ export async function syncTeams(sql: Sql, accessToken?: string): Promise<SyncRes
 
 export const OAUTH_COOKIE = "teams_oauth";
 
-/**
- * The app's main web address. Microsoft only sends you back to the exact address
- * registered in the app registration, so always use the main one.
- */
-export function appOrigin(requestUrl: string): string {
-  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
-  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
-  return new URL(requestUrl).origin;
-}
+export { appOrigin } from "./origin";
 
+/** Microsoft only sends you back to the exact address registered, so always use the main one. */
 export function callbackUrl(requestUrl: string): string {
   return `${appOrigin(requestUrl)}/api/teams/callback`;
 }

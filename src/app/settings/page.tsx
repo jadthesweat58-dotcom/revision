@@ -1,11 +1,26 @@
-import { logout, updateSettings, updateSubject } from "../actions";
+import { headers } from "next/headers";
+import { disconnectClaude, logout, revokeConnectorKey, updateSettings, updateSubject } from "../actions";
+import NewKeyForm from "./NewKeyForm";
 import SubmitButton from "@/components/SubmitButton";
 import { loadCore } from "@/lib/data";
 import { TIME_ZONES } from "@/lib/dates";
+import { db } from "@/lib/db";
+import { appOrigin } from "@/lib/origin";
+
+const GUIDE = "https://github.com/jadthesweat58-dotcom/revision/blob/claude/zealous-ramanujan-yw27hi/CONNECTOR.md";
 
 export default async function SettingsPage() {
   const core = await loadCore();
   const s = core.settings;
+  const sql = await db();
+  const keys = await sql<{ id: number; name: string; createdAt: Date; lastUsedAt: Date | null }[]>`
+    select id, name, created_at, last_used_at from api_keys where not revoked order by created_at`;
+  const [claude] = await sql<{ connections: number; lastUsed: Date | null }[]>`
+    select count(distinct client_id)::int as connections, max(last_used_at) as last_used
+    from oauth_tokens where kind = 'refresh' and not revoked and expires_at > now()`;
+  const connectorUrl = `${appOrigin(`https://${(await headers()).get("host") ?? "localhost"}`)}/api/mcp`;
+  const when = (d: Date | null) =>
+    d ? new Date(d).toLocaleDateString("en-GB", { timeZone: s.timeZone, day: "numeric", month: "short" }) : "never";
 
   return (
     <>
@@ -94,6 +109,53 @@ export default async function SettingsPage() {
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="card">
+        <h2>Connectors (Claude chats and Jarvis)</h2>
+        <p className="small muted">
+          Lets Claude study chats and Jarvis read your plan and log sessions, homework, tests and scores. Full guide:{" "}
+          <a href={GUIDE} style={{ color: "var(--accent)" }}>CONNECTOR.md</a>
+        </p>
+        <div className="stack small">
+          <h3>Claude</h3>
+          <p className="dim">
+            In claude.ai: Settings → Connectors → Add custom connector, and paste this address:
+          </p>
+          <code className="badge" style={{ whiteSpace: "normal", wordBreak: "break-all", userSelect: "all" }}>
+            {connectorUrl}
+          </code>
+          <div className="spread">
+            <span className="dim">
+              {claude?.connections ? `Connected (last used ${when(claude.lastUsed)})` : "Not connected yet"}
+            </span>
+            {claude?.connections ? (
+              <form action={disconnectClaude}>
+                <input type="hidden" name="back" value="/settings" />
+                <SubmitButton className="btn small ghost">Disconnect Claude</SubmitButton>
+              </form>
+            ) : null}
+          </div>
+        </div>
+        <div className="stack small">
+          <h3>Keys for Jarvis (or other bots)</h3>
+          <ul className="list">
+            {keys.length === 0 && <li className="muted">No keys yet.</li>}
+            {keys.map((k) => (
+              <li key={k.id}>
+                <span className="grow">
+                  {k.name} <span className="muted">· made {when(k.createdAt)} · last used {when(k.lastUsedAt)}</span>
+                </span>
+                <form action={revokeConnectorKey}>
+                  <input type="hidden" name="id" value={k.id} />
+                  <input type="hidden" name="back" value="/settings" />
+                  <SubmitButton className="btn small ghost">Switch off</SubmitButton>
+                </form>
+              </li>
+            ))}
+          </ul>
+          <NewKeyForm />
+        </div>
       </section>
 
       <section className="card">

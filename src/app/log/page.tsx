@@ -42,7 +42,7 @@ export default async function LogPage({ searchParams }: PageProps<"/log">) {
               <div className="grow">
                 <div>
                   {subjectName(core, s.subjectId)} · {formatMinutes(s.minutes)}
-                  {s.source !== "app" && <span className="badge"> via {s.source}</span>}
+                  {s.source !== "app" && <> <span className="badge">via {s.source}</span></>}
                 </div>
                 <div className="muted">
                   {formatDate(s.date)}
